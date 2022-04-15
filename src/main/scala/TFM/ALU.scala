@@ -14,7 +14,7 @@ import chisel3.util._
  * @param sizeInput:        Int::      Define the length of the inputs of the ALU
  * @param mQueryOperation:  Iterator:: Contains ordered the operations mode
  */
-class ALU(sizeOperation: Int = 0, sizeInput: Int = 0, mQueryOperation: Iterator[String] = Iterator()) extends Module {
+class ALU(sizeOperation: Int = 0, sizeInput: Int = 0) extends Module {
   val mIO = IO(new Bundle {
     val mOperation = Input(UInt(sizeOperation.W))
     val mValA = Input(UInt(sizeInput.W))
@@ -31,9 +31,22 @@ class ALU(sizeOperation: Int = 0, sizeInput: Int = 0, mQueryOperation: Iterator[
   // some default value is needed
   mResult := 0.U
   // The ALU selection
-  val num = (mQueryOperation.toList.apply(mOperation.hashCode()) : String) match{
-    //TODO: Definir operaciones que la ALU puede realizar
-    case "ADD" =>  mResult := mValA + mValB
+  var auxOp = UInt(sizeInput.W)
+  auxOp = (mValA >> mValB).asUInt
+  auxOp += (1.U(sizeInput.W) << (sizeInput - 1))
+
+  switch(mOperation) {
+    is(0.U) { mResult := mValA + mValB }
+    is(1.U) { mResult := mValA * mValB }
+    is(2.U) { mResult := mValA - mValB }
+    is(3.U) { mResult := mValA << mValB }
+    is(4.U) { mResult := auxOp.asUInt }
+    is(5.U) { mResult := mValA >> mValB }
+    is(6.U) { mResult := mValA & mValB }
+    is(7.U) { mResult := mValA | mValB }
+    is(8.U) { mResult := mValA ^ mValB }
+    is(9.U) { mResult := mValA / mValB }
+
   }
   // Output on the LEDs
   mIO.mResult := mResult
@@ -51,19 +64,18 @@ class ALU(sizeOperation: Int = 0, sizeInput: Int = 0, mQueryOperation: Iterator[
  * @param rangeInput:     Int::      Number of data INPUT ports
  * @param rangeOutput:    Int::      Number of OUTPUT ports
  */
-class ALUTopLevel(sizeOperation: Int, sizeInput: Int, queryOperation: Iterator[String] = Iterator(),
-                  rangeOperation: Int, rangeInput: Int, rangeOutput: Int) extends Module {
+class ALUTopLevel(sizeOperation: Int, sizeInput: Int, rangeOperation: Int, rangeInput: Int,
+                  rangeOutput: Int) extends Module {
   val mIOTopLevel = IO(new Bundle {
     val mSizeOperation = sizeOperation
     val mSizeInput = sizeInput
-    val mQueryOperation = queryOperation
     val mRangeOperation = rangeOperation
     val mRangeInput = rangeInput
     val mSwitch = Input(UInt(((rangeOperation + 1) + (rangeInput + 1)*2).W))
     val mOutput = Output(UInt(rangeOutput.W))
   })
 
-  val mALU = Module(new ALU(mIOTopLevel.mSizeOperation, mIOTopLevel.mSizeInput, mIOTopLevel.mQueryOperation))
+  val mALU = Module(new ALU(mIOTopLevel.mSizeOperation, mIOTopLevel.mSizeInput))
 
   // Map switches to the ALU input ports (operation and data)
   mALU.mIO.mOperation := mIOTopLevel.mSwitch(mIOTopLevel.mRangeOperation, 0)
@@ -77,12 +89,11 @@ class ALUTopLevel(sizeOperation: Int, sizeInput: Int, queryOperation: Iterator[S
   mIOTopLevel.mOutput := mALU.mIO.mResult
 }
 
-/* Generate the Verilog code
+// Generate the Verilog code
 object AluMain extends App {
   println("Generating the ALU hardware")
-  (new chisel3.stage.ChiselStage).emitVerilog(new ALUTopLevel(2,4,
-    Iterator("ADD", "ADD"), 1, 3, 10), Array("--target-dir", "generated"))
+  (new chisel3.stage.ChiselStage).emitVerilog(new ALUTopLevel(2,4, 1,
+    3, 10), Array("--target-dir", "generated"))
 
 }
 
- */
