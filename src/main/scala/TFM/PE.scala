@@ -1,8 +1,9 @@
 package TFM
 
-import Chisel.{Decoupled, Mux, RegInit, fromBooleanToLiteral, fromIntToWidth, fromtIntToLiteral, switch}
+import Chisel.{Decoupled, Mux, RegInit, RegNext, SInt, Valid, fromBooleanToLiteral, fromIntToWidth, fromtIntToLiteral, switch}
 import chisel3.util.is
-import chisel3.{Bundle, Flipped, Input, Module, Output, Reg, UInt, Wire}
+import chisel3.{Bundle, Flipped, Input, Module, Output, Reg, UInt, Wire, WireInit, when}
+import logger.LogLevel.Debug
 
 /**
  * @param sizeOperation:    Int::      Define the number of operation that can be performed by the ALU
@@ -30,7 +31,7 @@ import chisel3.{Bundle, Flipped, Input, Module, Output, Reg, UInt, Wire}
  *    mValid:               Flipped: :    Consumer interface for ready/valid communication
  */
 
-class PE(sizeSelection: Int = 4, sizeInput: Int = 2, sizeOperation: Int = 2) extends Module{
+class PE(sizeSelection: Int = 4, sizeInput: Int = 4, sizeOperation: Int = 4) extends Module{
   val mIO = IO(new Bundle {
 
     val mNorthInput    = Input(UInt(sizeInput.W))
@@ -49,90 +50,155 @@ class PE(sizeSelection: Int = 4, sizeInput: Int = 2, sizeOperation: Int = 2) ext
 
     val mOperation = Input(UInt(sizeOperation.W))
 
-    val mReady = Decoupled(UInt(32.W))
-    val mValid = Flipped(Decoupled(UInt(32.W)))
+    val in = Flipped(Decoupled(UInt(32.W)))
+    val out = Decoupled(UInt(32.W))
   })
 
-  //Initialization of the variables with the inputs
-  val mNorthInput = mIO.mNorthInput
-  val mEastInput = mIO.mEastInput
-  val mWestInput = mIO.mWestInput
-  val mSouthInput = mIO.mSouthInput
-  val mLeftMuxInput = mIO.mLeftMuxInput
-  val mRightMuxInput = mIO.mRightMuxInput
-  val mMuxOutput = mIO.mMuxOutput
 
-  val mOperation = Reg(UInt(sizeOperation.W))
-  mOperation := mIO.mOperation
+  // input and output data registers
+  val inReg = RegInit(0.U(32.W))
+  val outReg = RegInit(0.U(32.W))
 
-  // Initialization of the ready/valid communication
-  // Right now the ALU is ready to perform and operation (ready = true),
-  // but it doesn't have a correct result (valid = false)
-  mIO.mValid.ready := true.B
-  mIO.mReady.valid := false.B
+  // input and output valid registers
+  val inValidReg = RegInit(false.B)
+  val outValidReg = RegNext(false.B)
 
-  // There is not going to be communication between the producer and the
-  // consumer using the bits interface, but it should be initialize, if not
-  // the compilation will fail
-  mIO.mReady.bits := 0.U
+  // input and output ready registers
+  val inReadyReg = RegInit(false.B)
+  val outReadyReg = RegInit(false.B)
 
-  // mValA will store the value of the left mux selection. By default it is 0
-  val mValA = Wire(UInt(sizeInput.W))
-  mValA := 0.U
-  switch(mLeftMuxInput) {
-    is(0.U) { mValA := mNorthInput }
-    is(1.U) { mValA := mEastInput }
-    is(2.U) { mValA := mWestInput }
-    is(3.U) { mValA := mSouthInput }
+  // connect input data and valid signals to registers
+  when(mIO.in.fire()) {
+    inReg := mIO.in.bits
+    inValidReg := true.B
+  }
+  when(mIO.out.fire()) {
+    outValidReg := false.B
   }
 
-  // mValB will store the value of the rigth mux selection. By default it is 0
-  val mValB = Wire(UInt(sizeInput.W))
-  mValB := 0.U
-  switch(mRightMuxInput) {
-    is(0.U) { mValB := mNorthInput }
-    is(1.U) { mValB := mEastInput }
-    is(2.U) { mValB := mWestInput }
-    is(3.U) { mValB := mSouthInput }
+  // connect output data and valid signals to registers
+  mIO.out.bits := outReg
+  mIO.out.valid := outValidReg
+
+  // input ready signal logic
+  mIO.in.ready := !inValidReg || inReadyReg
+  when(mIO.in.fire()) {
+    inReadyReg := false.B
   }
-  // As the ALU starts with the operation, the PE stops being ready (ready = false)
-  mIO.mValid.ready := false.B
-
-  // Creation and initialization of the ALU module
-  val ALU = Module(new ALU(sizeInput, sizeOperation))
-  ALU.mIO.mValA := mValA
-  ALU.mIO.mValB := mValB
-  ALU.mIO.mOperation := mOperation
-
-  // The results will be store in a register
-  val mResult = Reg(UInt(sizeInput.W))
-  mResult := ALU.mIO.mResult
-
-  val mRegisterIn = Reg(UInt(sizeInput.W))
-  mRegisterIn := mResult
-  val mRegisterOut = mRegisterIn
-
-  // The result of the output will depend on the output mux value, it can be
-  // one of the inputs or the result of the ALU
-  val mResultOut = Wire(UInt(sizeInput.W))
-  mResultOut := 0.U
-  switch(mMuxOutput) {
-    is(0.U) { mResultOut := mNorthInput }
-    is(1.U) { mResultOut := mEastInput }
-    is(2.U) { mResultOut := mWestInput }
-    is(3.U) { mResultOut := mSouthInput }
-    is(4.U) { mResultOut := mRegisterOut }
+  when(!mIO.in.fire() && !inValidReg) {
+    inReadyReg := true.B
   }
 
-  // Connect by HW the result with the outputs
-  mIO.mNorthOutput := mResultOut
-  mIO.mEastOutput := mResultOut
-  mIO.mWestOutput := mResultOut
-  mIO.mSouthOutput := mResultOut
+  // output ready signal logic
+  outReadyReg := true.B
+  when(mIO.out.fire()) {
+    outReadyReg := false.B
+  }
+  when(!mIO.out.fire() && !outValidReg) {
+    outReadyReg := true.B
+  }
 
-  // Right now the PE has a valid value so it is ready to send it (valid = true)
-  mIO.mReady.valid := true.B
+    val mValA = Wire(UInt(sizeInput.W))
+    mValA := 0.U
 
+    val mValB = Wire(UInt(sizeInput.W))
+    mValB := 0.U
+
+    mIO.mNorthOutput := 0.U
+    mIO.mEastOutput := 0.U
+    mIO.mWestOutput := 0.U
+    mIO.mSouthOutput := 0.U
+
+    val mOperation = Wire(UInt(sizeOperation.W))
+    mOperation := mIO.mOperation
+
+  when(mIO.in.valid) {
+    // Initialization of the ready/valid communication
+    // Right now the ALU is ready to perform and operation (ready = true),
+    // but it doesn't have a correct result (valid = false)
+    //mIO.mValid.valid := true.B
+    // mIO.mReady.ready := false.B
+
+    // There is not going to be communication between the producer and the
+    // consumer using the bits interface, but it should be initialize, if not
+    // the compilation will fail
+    //mIO.mReady.bits := 0.U
+
+    // mValA will store the value of the left mux selection. By default it is 0
+    switch(mIO.mLeftMuxInput) {
+      is(0.U) {
+        mValA := mIO.mNorthInput
+      }
+      is(1.U) {
+        mValA := mIO.mEastInput
+      }
+      is(2.U) {
+        mValA := mIO.mWestInput
+      }
+      is(3.U) {
+        mValA := mIO.mSouthInput
+      }
+    }
+
+    // mValB will store the value of the rigth mux selection. By default it is 0
+
+    switch(mIO.mRightMuxInput) {
+      is(0.U) {
+        mValB := mIO.mNorthInput
+      }
+      is(1.U) {
+        mValB := mIO.mEastInput
+      }
+      is(2.U) {
+        mValB := mIO.mWestInput
+      }
+      is(3.U) {
+        mValB := mIO.mSouthInput
+      }
+    }
+
+    // Creation and initialization of the ALU module
+    val ALU = Module(new ALU(sizeInput, sizeOperation))
+    ALU.mIO.mValA := mValA
+    ALU.mIO.mValB := mValB
+    ALU.mIO.mOperation := mIO.mOperation
+
+    // The result of the output will depend on the output mux value, it can be
+    // one of the inputs or the result of the ALU
+    val mResultOut = Wire(UInt(sizeInput.W))
+    mResultOut := 0.U
+    switch(mIO.mMuxOutput) {
+      is(0.U) {
+        mResultOut := mIO.mNorthInput
+      }
+      is(1.U) {
+        mResultOut := mIO.mEastInput
+      }
+      is(2.U) {
+        mResultOut := mIO.mWestInput
+      }
+      is(3.U) {
+        mResultOut := mIO.mSouthInput
+      }
+      is(4.U) {
+        mResultOut := ALU.mIO.mResult
+      }
+    }
+
+    //The output value of the mux is stored ina Register
+    val auxReg = Reg(UInt(sizeOperation.W))
+    auxReg := mResultOut
+
+
+
+    // Connect by HW the result with the outputs
+    mIO.mNorthOutput := auxReg
+    mIO.mEastOutput := auxReg
+    mIO.mWestOutput := auxReg
+    mIO.mSouthOutput := auxReg
+
+    outValidReg := true.B
+  }
 }
 
 // Generate the Verilog code

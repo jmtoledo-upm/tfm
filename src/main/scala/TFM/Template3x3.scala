@@ -51,10 +51,21 @@ class Template3x3(sizeInput: Int = 4) extends Module{
     val mP9OutMux = Input(UInt(sizeInput.W))
 
     val mValA = Output(UInt(sizeInput.W))
+    val mValB = Output(UInt(sizeInput.W))
 
+    val mData1Mutex = Input(UInt(sizeInput.W))
+    val mData2Mutex = Input(UInt(sizeInput.W))
+    val mData3Mutex = Input(UInt(sizeInput.W))
 
+    val mData1 = Input(UInt(sizeInput.W))
+    val mData2 = Input(UInt(sizeInput.W))
+    val mData3 = Input(UInt(sizeInput.W))
+
+    val in = Flipped(Decoupled(UInt(8.W)))
+    val out = Decoupled(UInt(8.W))
   })
 
+  //Create PEs modules
   val PE1 = Module(new PE())
   val PE2 = Module(new PE())
   val PE3 = Module(new PE())
@@ -65,6 +76,10 @@ class Template3x3(sizeInput: Int = 4) extends Module{
   val PE8 = Module(new PE())
   val PE9 = Module(new PE())
 
+
+  //Connect data. The first 3 ones should be able to switch between the input data
+  //and the values for the other PEs. The others only receive values from the rest
+  //of PEs
 
   PE1.mIO.mNorthInput := PE7.mIO.mSouthOutput
   PE1.mIO.mEastInput := PE2.mIO.mWestOutput
@@ -80,6 +95,52 @@ class Template3x3(sizeInput: Int = 4) extends Module{
   PE3.mIO.mEastInput := PE1.mIO.mWestOutput
   PE3.mIO.mSouthInput := PE6.mIO.mNorthOutput
   PE3.mIO.mWestInput := PE2.mIO.mEastOutput
+
+  switch(mIO.mData1Mutex) {
+    is(0.U) {
+      PE1.mIO.mNorthInput := PE7.mIO.mSouthOutput
+      PE1.mIO.mEastInput := PE2.mIO.mWestOutput
+      PE1.mIO.mSouthInput := PE4.mIO.mNorthOutput
+      PE1.mIO.mWestInput := PE3.mIO.mEastOutput
+    }
+    is(1.U) {
+      PE1.mIO.mNorthInput := mIO.mData1
+      PE1.mIO.mEastInput := mIO.mData1
+      PE1.mIO.mSouthInput := mIO.mData1
+      PE1.mIO.mWestInput := mIO.mData1
+    }
+  }
+
+  switch(mIO.mData2Mutex) {
+    is(0.U) {
+      PE2.mIO.mNorthInput := PE8.mIO.mSouthOutput
+      PE2.mIO.mEastInput := PE3.mIO.mWestOutput
+      PE2.mIO.mSouthInput := PE5.mIO.mNorthOutput
+      PE2.mIO.mWestInput := PE1.mIO.mEastOutput
+    }
+    is(1.U) {
+      PE2.mIO.mNorthInput := mIO.mData2
+      PE2.mIO.mEastInput := mIO.mData2
+      PE2.mIO.mSouthInput := mIO.mData2
+      PE2.mIO.mWestInput := mIO.mData2
+    }
+  }
+
+  switch(mIO.mData3Mutex) {
+    is(0.U) {
+      PE3.mIO.mNorthInput := PE9.mIO.mSouthOutput
+      PE3.mIO.mEastInput := PE1.mIO.mWestOutput
+      PE3.mIO.mSouthInput := PE6.mIO.mNorthOutput
+      PE3.mIO.mWestInput := PE2.mIO.mEastOutput
+    }
+    is(1.U) {
+      PE3.mIO.mNorthInput := mIO.mData3
+      PE3.mIO.mEastInput := mIO.mData3
+      PE3.mIO.mSouthInput := mIO.mData3
+      PE3.mIO.mWestInput := mIO.mData3
+    }
+  }
+
 
   PE4.mIO.mNorthInput := PE1.mIO.mSouthOutput
   PE4.mIO.mEastInput := PE5.mIO.mWestOutput
@@ -111,6 +172,8 @@ class Template3x3(sizeInput: Int = 4) extends Module{
   PE9.mIO.mSouthInput := PE3.mIO.mNorthOutput
   PE9.mIO.mWestInput := PE8.mIO.mEastOutput
 
+
+  //Create the connection with the operation values of the PEs
   PE1.mIO.mOperation := mIO.mP1Operation
   PE2.mIO.mOperation := mIO.mP2Operation
   PE3.mIO.mOperation := mIO.mP3Operation
@@ -121,6 +184,7 @@ class Template3x3(sizeInput: Int = 4) extends Module{
   PE8.mIO.mOperation := mIO.mP8Operation
   PE9.mIO.mOperation := mIO.mP9Operation
 
+  //Connect the different muxes of the PEs
   PE1.mIO.mLeftMuxInput := mIO.mP1LeftMux
   PE1.mIO.mRightMuxInput := mIO.mP1RightMux
   PE1.mIO.mMuxOutput := mIO.mP1OutMux
@@ -158,44 +222,23 @@ class Template3x3(sizeInput: Int = 4) extends Module{
   PE9.mIO.mMuxOutput := mIO.mP9OutMux
 
   mIO.mValA := 0.U
-  mIO.mValA := PE1.mIO.mEastOutput
+  mIO.mValA := PE4.mIO.mNorthOutput
 
-  PE1.mIO.mValid.valid := false.B
-  PE1.mIO.mValid.bits := 0.U
-  PE1.mIO.mReady.ready := false.B
+  mIO.mValB := 0.U
+  mIO.mValB := PE1.mIO.mEastOutput
 
-  PE2.mIO.mValid.valid := false.B
-  PE2.mIO.mValid.bits := 0.U
-  PE2.mIO.mReady.ready := false.B
+  //Set the valid/ready structure
+  PE1.mIO.in <> mIO.in
+  PE1.mIO.out <> PE4.mIO.in
+  mIO.out <> PE4.mIO.out
 
-  PE3.mIO.mValid.valid := false.B
-  PE3.mIO.mValid.bits := 0.U
-  PE3.mIO.mReady.ready := false.B
-
-  PE4.mIO.mValid.valid := false.B
-  PE4.mIO.mValid.bits := 0.U
-  PE4.mIO.mReady.ready := false.B
-
-  PE5.mIO.mValid.valid := false.B
-  PE5.mIO.mValid.bits := 0.U
-  PE5.mIO.mReady.ready := false.B
-
-  PE6.mIO.mValid.valid := false.B
-  PE6.mIO.mValid.bits := 0.U
-  PE6.mIO.mReady.ready := false.B
-
-  PE7.mIO.mValid.valid := false.B
-  PE7.mIO.mValid.bits := 0.U
-  PE7.mIO.mReady.ready := false.B
-
-  PE8.mIO.mValid.valid := false.B
-  PE8.mIO.mValid.bits := 0.U
-  PE8.mIO.mReady.ready := false.B
-
-  PE9.mIO.mValid.valid := false.B
-  PE9.mIO.mValid.bits := 0.U
-  PE9.mIO.mReady.ready := false.B
-
+  PE3.mIO.out <> PE2.mIO.in
+  PE2.mIO.out <> PE3.mIO.in
+  PE6.mIO.out <> PE5.mIO.in
+  PE5.mIO.out <> PE6.mIO.in
+  PE8.mIO.out <> PE7.mIO.in
+  PE9.mIO.out <> PE8.mIO.in
+  PE7.mIO.out <> PE9.mIO.in
 
 
 }

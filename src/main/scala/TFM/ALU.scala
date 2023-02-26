@@ -36,7 +36,8 @@ class ALU(sizeOperation: Int = 5, sizeInput: Int = 5) extends Module {
 
   // Switch between the different operation types
   switch(mOperation) {
-    is(0.U) { mResult := mValA + mValB }
+    is(0.U) {
+      mResult := mValA + mValB }
     is(1.U) { mResult := mValA * mValB }
     is(2.U) { mResult := mValA - mValB }
     is(3.U) { mResult := mValA << mValB }

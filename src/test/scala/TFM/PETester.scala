@@ -10,7 +10,7 @@ class PETester extends AnyFlatSpec with ChiselScalatestTester {
   "PETester test" should "pass" in {
     test(new PE(4, 4, 4)) { dut =>
       var a = 1
-      for (op <- 1 to 9) {
+      for (op <- 0 to 9) {
         var result = 0
         var auxOp = 1
         auxOp = (auxOp >> auxOp)
@@ -21,7 +21,7 @@ class PETester extends AnyFlatSpec with ChiselScalatestTester {
           case 2 => a - a
           case 3 => a << a
           case 4 => auxOp
-          case 5 => auxOp
+          case 5 => a >> a
           case 6 => a & a
           case 7 => a | a
           case 8 => a ^ a
@@ -33,9 +33,8 @@ class PETester extends AnyFlatSpec with ChiselScalatestTester {
         dut.mIO.mSouthInput.poke(a.U(4.W))
 
         dut.mIO.mOperation.poke(op.U(4.W))
-        dut.clock.step()
-        dut.clock.step()
-        dut.clock.step()
+
+
         for (mux <- 0 to 3) {
           dut.mIO.mLeftMuxInput.poke(mux.U(4.W))
           dut.mIO.mRightMuxInput.poke(mux.U(4.W))
@@ -43,6 +42,7 @@ class PETester extends AnyFlatSpec with ChiselScalatestTester {
           for (outmux <- 0 to 4) {
             dut.mIO.mMuxOutput.poke(outmux.U(4.W))
 
+            dut.clock.step()
             outmux match {
               case 0 => dut.mIO.mNorthOutput.expect(a.U(4.W))
               case 1 => dut.mIO.mNorthOutput.expect(a.U(4.W))
