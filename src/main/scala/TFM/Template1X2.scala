@@ -98,8 +98,8 @@ class Template1x2(sizeInput: Int = 4) extends Module{
   mIO.out <> PE2.mIO.out
 
   mIO.mValA := PE1.mIO.mWestOutput
-  mIO.mValB := PE2.mIO.mWestInput
-  mIO.mValC := PE2.mIO.mWestOutput
+  mIO.mValB := PE2.mIO.mWestOutput
+  mIO.mValC := PE1.mIO.mWestOutput
   mIO.mValD := PE2.mIO.mWestOutput
 
 

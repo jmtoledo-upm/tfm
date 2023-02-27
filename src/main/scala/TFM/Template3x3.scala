@@ -1,16 +1,11 @@
 package TFM
 
-import Chisel.{Decoupled, Mux, RegInit, fromBooleanToLiteral, fromIntToWidth, fromtIntToLiteral, switch}
+import Chisel.{Bool, Decoupled, Mux, RegInit, fromBooleanToLiteral, fromIntToWidth, fromtIntToLiteral, switch}
 import chisel3.util.is
-import chisel3.{Bundle, Flipped, Input, Module, Output, Reg, UInt, Wire}
+import chisel3.{Bundle, Flipped, Input, Module, Output, Reg, UInt, Wire, when}
 
 class Template3x3(sizeInput: Int = 4) extends Module{
   val mIO = IO(new Bundle {
-    val mControl    = Input(UInt(sizeInput.W))
-    val mValFirstRow     = Input(UInt(sizeInput.W))
-    val mValSecondRow     = Input(UInt(sizeInput.W))
-    val mValThirdRow    = Input(UInt(sizeInput.W))
-    //val mResult     = Output(UInt(sizeInput.W))
 
     val mP1Operation = Input(UInt(sizeInput.W))
     val mP2Operation = Input(UInt(sizeInput.W))
@@ -61,8 +56,12 @@ class Template3x3(sizeInput: Int = 4) extends Module{
     val mData2 = Input(UInt(sizeInput.W))
     val mData3 = Input(UInt(sizeInput.W))
 
-    val in = Flipped(Decoupled(UInt(8.W)))
-    val out = Decoupled(UInt(8.W))
+    val in1 = Flipped(Decoupled(UInt(32.W)))
+    val out1 = Decoupled(UInt(32.W))
+    val in2 = Flipped(Decoupled(UInt(32.W)))
+    val out2 = Decoupled(UInt(32.W))
+    val in3 = Flipped(Decoupled(UInt(32.W)))
+    val out3 = Decoupled(UInt(32.W))
   })
 
   //Create PEs modules
@@ -108,8 +107,7 @@ class Template3x3(sizeInput: Int = 4) extends Module{
       PE1.mIO.mEastInput := mIO.mData1
       PE1.mIO.mSouthInput := mIO.mData1
       PE1.mIO.mWestInput := mIO.mData1
-    }
-  }
+    }  }
 
   switch(mIO.mData2Mutex) {
     is(0.U) {
@@ -221,24 +219,27 @@ class Template3x3(sizeInput: Int = 4) extends Module{
   PE9.mIO.mRightMuxInput := mIO.mP9RightMux
   PE9.mIO.mMuxOutput := mIO.mP9OutMux
 
-  mIO.mValA := 0.U
-  mIO.mValA := PE4.mIO.mNorthOutput
-
-  mIO.mValB := 0.U
-  mIO.mValB := PE1.mIO.mEastOutput
 
   //Set the valid/ready structure
-  PE1.mIO.in <> mIO.in
-  PE1.mIO.out <> PE4.mIO.in
-  mIO.out <> PE4.mIO.out
+  PE1.mIO.in <> mIO.in1
+  PE4.mIO.in <> PE1.mIO.out
+  PE7.mIO.in <> PE4.mIO.out
+  mIO.out1 <> PE7.mIO.out
 
-  PE3.mIO.out <> PE2.mIO.in
-  PE2.mIO.out <> PE3.mIO.in
-  PE6.mIO.out <> PE5.mIO.in
-  PE5.mIO.out <> PE6.mIO.in
-  PE8.mIO.out <> PE7.mIO.in
-  PE9.mIO.out <> PE8.mIO.in
-  PE7.mIO.out <> PE9.mIO.in
+  PE2.mIO.in <> mIO.in2
+  PE5.mIO.in <> PE2.mIO.out
+  PE8.mIO.in <> PE5.mIO.out
+  mIO.out2 <> PE8.mIO.out
+
+  PE3.mIO.in <> mIO.in3
+  PE6.mIO.in <> PE3.mIO.out
+  PE9.mIO.in <> PE6.mIO.out
+  mIO.out3 <> PE9.mIO.out
 
 
+  mIO.mValA := 0.U
+  mIO.mValA := PE4.mIO.mSouthOutput
+
+  mIO.mValB := 0.U
+  mIO.mValB := PE7.mIO.mSouthOutput
 }
